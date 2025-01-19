@@ -2,63 +2,101 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const Login = () => {
+  const [role, setRole] = useState('student'); // Default role is 'student'
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  const handleLogin = () => {
-    // Simple login validation (can be replaced with real authentication logic later)
-    if (username === 'student' && password === 'password') {
-      navigate('/dashboard');  // Navigate to dashboard if credentials are correct
+  const handleSubmit = (e) => {
+    e.preventDefault();
+
+    // Dummy authentication for both Student and Teacher
+    if ((role === 'student' && username === 's' && password === 'p') || 
+        (role === 'teacher' && username === 's' && password === 'p')) {
+      // Redirect to the correct dashboard based on role
+      if (role === 'student') {
+        navigate('/student-dashboard');  // Replace with your student dashboard route
+      } else if (role === 'teacher') {
+        navigate('/teacher-dashboard');  // Replace with your teacher dashboard route
+      }
     } else {
-      alert('Invalid credentials');
+      setError('Invalid username or password');
     }
   };
 
   return (
-    <div className="flex justify-center items-center h-screen bg-gradient-to-r from-blue-500 via-indigo-600 to-purple-700">
-      <div className="bg-white p-8 rounded-lg shadow-lg max-w-md w-full">
-        <div className="text-center mb-6">
-          <h2 className="text-3xl font-semibold text-blue-700">Student Portal</h2>
-          <p className="text-gray-600">Log in to your account to manage attendance</p>
-        </div>
-        <div className="space-y-4">
+    <div className="flex items-center justify-center min-h-screen bg-gray-100">
+      <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
+        <h2 className="text-2xl font-bold text-center mb-6">Login</h2>
+
+        {/* Error Message */}
+        {error && <p className="text-red-500 text-center mb-4">{error}</p>}
+        
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Role Selection */}
           <div>
-            <label htmlFor="username" className="block text-sm font-medium text-gray-700">Username</label>
+            <label className="block text-sm font-medium text-gray-700">Login as</label>
+            <div className="flex items-center space-x-4 mt-2">
+              <label>
+                <input 
+                  type="radio" 
+                  name="role" 
+                  value="student" 
+                  checked={role === 'student'}
+                  onChange={() => setRole('student')}
+                  className="mr-2"
+                />
+                Student
+              </label>
+              <label>
+                <input 
+                  type="radio" 
+                  name="role" 
+                  value="teacher" 
+                  checked={role === 'teacher'}
+                  onChange={() => setRole('teacher')}
+                  className="mr-2"
+                />
+                Teacher
+              </label>
+            </div>
+          </div>
+
+          {/* Username */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Username</label>
             <input
-              id="username"
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="w-full p-3 border border-gray-300 rounded-md mt-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full p-3 border border-gray-300 rounded-md mt-2"
               placeholder="Enter your username"
             />
           </div>
+
+          {/* Password */}
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700">Password</label>
+            <label className="block text-sm font-medium text-gray-700">Password</label>
             <input
-              id="password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full p-3 border border-gray-300 rounded-md mt-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full p-3 border border-gray-300 rounded-md mt-2"
               placeholder="Enter your password"
             />
           </div>
-        </div>
-        <div className="mt-6">
-          <button
-            onClick={handleLogin}
-            className="w-full py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            Log In
-          </button>
-        </div>
-        <div className="mt-4 text-center">
-          <p className="text-sm text-gray-600">
-            Don't have an account? <a href="/signup" className="text-blue-600 hover:text-blue-800">Sign up</a>
-          </p>
-        </div>
+
+          {/* Submit Button */}
+          <div className="mt-4">
+            <button 
+              type="submit" 
+              className="w-full py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              Login
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
