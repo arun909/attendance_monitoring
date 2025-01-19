@@ -65,7 +65,7 @@ const Login = () => {
 
           {/* Username */}
           <div>
-            <label className="block text-sm font-medium text-gray-700">Username</label>
+            <label className="block text-sm font-medium text-gray-700">USERNAME</label>
             <input
               type="text"
               value={username}
@@ -77,7 +77,7 @@ const Login = () => {
 
           {/* Password */}
           <div>
-            <label className="block text-sm font-medium text-gray-700">Password</label>
+            <label className="block text-sm font-medium text-gray-700">PASSWORD</label>
             <input
               type="password"
               value={password}
