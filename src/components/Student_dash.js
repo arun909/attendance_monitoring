@@ -2,13 +2,60 @@ import React, { useState } from 'react';
 
 const StudentDash = () => {
   const [darkMode, setDarkMode] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]); // Default to today's date
 
-  // Dummy data for attendance
-  const attendanceData = {
-    totalClasses: 30,
-    present: 25,
-    absent: 5,
-    attendancePercentage: 83.33,
+  // Dummy data for attendance by subject
+  const subjectAttendanceData = {
+    Math: { totalClasses: 30, present: 25, absent: 5, attendancePercentage: 83.33 },
+    Science: { totalClasses: 28, present: 24, absent: 4, attendancePercentage: 85.71 },
+    History: { totalClasses: 25, present: 20, absent: 5, attendancePercentage: 80.0 },
+    English: { totalClasses: 30, present: 28, absent: 2, attendancePercentage: 93.33 },
+    Physics: { totalClasses: 26, present: 22, absent: 4, attendancePercentage: 84.62 },
+    Chemistry: { totalClasses: 28, present: 25, absent: 3, attendancePercentage: 89.29 },
+    Biology: { totalClasses: 24, present: 20, absent: 4, attendancePercentage: 83.33 },
+    Geography: { totalClasses: 22, present: 18, absent: 4, attendancePercentage: 81.82 },
+  };
+
+  // Dummy timetable data
+  const timetableData = [
+    { day: 'Monday', subjects: ['Math', 'Science', 'History'] },
+    { day: 'Tuesday', subjects: ['English', 'Physics', 'Chemistry'] },
+    { day: 'Wednesday', subjects: ['Biology', 'Geography', 'Math'] },
+    { day: 'Thursday', subjects: ['Science', 'History', 'English'] },
+    { day: 'Friday', subjects: ['Physics', 'Chemistry', 'Biology'] },
+  ];
+
+  // Dummy attendance records for each date
+  const attendanceRecords = {
+    '2023-10-01': { Math: 'Present', Science: 'Absent', History: 'Present' },
+    '2023-10-02': { English: 'Present', Physics: 'Present', Chemistry: 'Absent' },
+    '2023-10-03': { Biology: 'Present', Geography: 'Absent', Math: 'Present' },
+    '2023-10-04': { Science: 'Present', History: 'Present', English: 'Absent' },
+    '2023-10-05': { Physics: 'Absent', Chemistry: 'Present', Biology: 'Present' },
+  };
+
+  // Get the day of the week for the selected date
+  const getDayOfWeek = (date) => {
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const dayIndex = new Date(date).getDay();
+    return days[dayIndex];
+  };
+
+  // Get subjects for the selected date based on the timetable
+  const getSubjectsForDate = (date) => {
+    const dayOfWeek = getDayOfWeek(date);
+    const dayData = timetableData.find((day) => day.day === dayOfWeek);
+    return dayData ? dayData.subjects : [];
+  };
+
+  // Get attendance status for each subject on the selected date
+  const getAttendanceForDate = (date) => {
+    const subjects = getSubjectsForDate(date);
+    const attendanceForDate = attendanceRecords[date] || {};
+    return subjects.map((subject) => ({
+      subject,
+      status: attendanceForDate[subject] || 'Absent', // Default to 'Absent' if no record exists
+    }));
   };
 
   // Toggle dark mode
@@ -16,17 +63,37 @@ const StudentDash = () => {
     setDarkMode(!darkMode);
   };
 
+  // Handle date change for recent attendance
+  const handleDateChange = (e) => {
+    setSelectedDate(e.target.value);
+  };
+
+  // Get attendance data for the selected date
+  const attendanceForSelectedDate = getAttendanceForDate(selectedDate);
+
+  // Calculate overall semester attendance
+  const overallAttendance = {
+    totalClasses: Object.values(subjectAttendanceData).reduce((sum, data) => sum + data.totalClasses, 0),
+    present: Object.values(subjectAttendanceData).reduce((sum, data) => sum + data.present, 0),
+    absent: Object.values(subjectAttendanceData).reduce((sum, data) => sum + data.absent, 0),
+    attendancePercentage: (
+      (Object.values(subjectAttendanceData).reduce((sum, data) => sum + data.present, 0) /
+        Object.values(subjectAttendanceData).reduce((sum, data) => sum + data.totalClasses, 0)) *
+      100
+    ).toFixed(2),
+  };
+
   return (
-    <div className={`min-h-screen ${darkMode ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-900'}`}>
+    <div className={`min-h-screen ${darkMode ? 'bg-gray-900 text-white' : 'bg-gray-50 text-gray-900'}`}>
       {/* Custom Navbar */}
-      <div className={`${darkMode ? 'bg-gray-800' : 'bg-gradient-to-r from-blue-700 to-indigo-700'} text-white p-4 shadow-lg`}>
+      <div className={`${darkMode ? 'bg-gray-800' : 'bg-gradient-to-r from-blue-600 to-indigo-600'} text-white p-4 shadow-lg`}>
         <div className="container mx-auto flex justify-between items-center">
           <h2 className="text-2xl font-semibold">Attendance Monitoring System</h2>
           <div className="flex space-x-4">
             {/* Dark Mode Toggle Button */}
             <button
               onClick={toggleDarkMode}
-              className={`p-2 rounded-full ${darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-blue-600 hover:bg-blue-700'}`}
+              className={`p-2 rounded-full ${darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-blue-500 hover:bg-blue-600'}`}
             >
               {darkMode ? (
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -38,13 +105,13 @@ const StudentDash = () => {
                 </svg>
               )}
             </button>
-            <button className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-md transition duration-300 flex items-center">
+            <button className="bg-green-500 hover:bg-green-600 px-4 py-2 rounded-md transition duration-300 flex items-center">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
               </svg>
               Profile
             </button>
-            <button className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-md transition duration-300 flex items-center">
+            <button className="bg-red-500 hover:bg-red-600 px-4 py-2 rounded-md transition duration-300 flex items-center">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M3 3a1 1 0 011 1v12a1 1 0 11-2 0V4a1 1 0 011-1zm7.707 3.293a1 1 0 010 1.414L9.414 9H17a1 1 0 110 2H9.414l1.293 1.293a1 1 0 01-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0z" clipRule="evenodd" />
               </svg>
@@ -54,106 +121,76 @@ const StudentDash = () => {
         </div>
       </div>
 
-      {/* Navigation Bar */}
-      <div className={`${darkMode ? 'bg-gray-700' : 'bg-white'} shadow-md`}>
-        <div className="container mx-auto p-4 flex space-x-8">
-          <a href="#" className={`${darkMode ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-800'} font-semibold text-lg`}>Dashboard</a>
-          <a href="#" className={`${darkMode ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-800'} font-semibold text-lg`}>Attendance</a>
-          <a href="#" className={`${darkMode ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-800'} font-semibold text-lg`}>Reports</a>
-          <a href="#" className={`${darkMode ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-800'} font-semibold text-lg`}>Notifications</a>
-        </div>
-      </div>
-
       {/* Main Content */}
       <div className="container mx-auto p-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Attendance Summary */}
-          <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} p-6 rounded-lg shadow-md`}>
-            <h3 className="text-xl font-semibold mb-4">Attendance Summary</h3>
-            <div className="space-y-4">
-              <div className="flex justify-between">
-                <span>Total Classes</span>
-                <span className="font-semibold">{attendanceData.totalClasses}</span>
+        <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-md p-6`}>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Attendance Summary */}
+            <div className="md:col-span-2">
+              <h3 className="text-xl font-semibold mb-6">Attendance Summary</h3>
+              <div className="space-y-6 h-[400px] overflow-y-auto pr-4">
+                {Object.entries(subjectAttendanceData).map(([subject, data]) => (
+                  <div key={subject} className="space-y-2">
+                    <h4 className="font-semibold text-lg">{subject}</h4>
+                    <div className="flex justify-between text-sm text-gray-500">
+                      <span>Total Classes: {data.totalClasses}</span>
+                      <span>Present: {data.present}</span>
+                      <span>Absent: {data.absent}</span>
+                    </div>
+                    {/* Progress Bar */}
+                    <div className={`w-full ${darkMode ? 'bg-gray-700' : 'bg-gray-200'} rounded-full h-2.5`}>
+                      <div
+                        className="bg-gradient-to-r from-blue-400 to-indigo-400 h-2.5 rounded-full"
+                        style={{ width: `${data.attendancePercentage}%` }}
+                      ></div>
+                    </div>
+                    <div className="text-sm text-gray-500 text-right">
+                      {data.attendancePercentage}% Attendance
+                    </div>
+                  </div>
+                ))}
               </div>
-              <div className="flex justify-between">
-                <span>Present</span>
-                <span className="font-semibold text-green-600">{attendanceData.present}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Absent</span>
-                <span className="font-semibold text-red-600">{attendanceData.absent}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Attendance Percentage</span>
-                <span className="font-semibold">{attendanceData.attendancePercentage}%</span>
-              </div>
-              {/* Progress Bar */}
-              <div className="w-full bg-gray-200 rounded-full h-2.5 mt-4">
-                <div
-                  className="bg-blue-600 h-2.5 rounded-full"
-                  style={{ width: `${attendanceData.attendancePercentage}%` }}
-                ></div>
+            </div>
+
+            {/* Overall Semester Attendance */}
+            <div className="md:col-span-1">
+              <h3 className="text-xl font-semibold mb-6">Overall Semester Attendance</h3>
+              <div className={`p-6 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-50'} hover:shadow-md transition duration-300`}>
+                <div className="text-center">
+                  <h4 className="text-4xl font-bold mb-4">{overallAttendance.attendancePercentage}%</h4>
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm text-gray-500">
+                      <span>Total Classes</span>
+                      <span>{overallAttendance.totalClasses}</span>
+                    </div>
+                    <div className="flex justify-between text-sm text-gray-500">
+                      <span>Present</span>
+                      <span className="text-green-600">{overallAttendance.present}</span>
+                    </div>
+                    <div className="flex justify-between text-sm text-gray-500">
+                      <span>Absent</span>
+                      <span className="text-red-600">{overallAttendance.absent}</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Attendance Chart */}
-          <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} p-6 rounded-lg shadow-md col-span-2`}>
-            <h3 className="text-xl font-semibold mb-4">Attendance Trend</h3>
-            <div className={`${darkMode ? 'bg-gray-700' : 'bg-gray-50'} p-4 rounded-lg`}>
-              {/* Placeholder for a chart (e.g., Bar Chart or Line Chart) */}
-              <div className="h-48 flex items-center justify-center text-gray-500">
-                <span>Chart will be displayed here</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Recent Attendance Records */}
-        <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} p-6 rounded-lg shadow-md mt-6`}>
-          <h3 className="text-xl font-semibold mb-4">Recent Attendance Records</h3>
-          <div className="overflow-x-auto">
-            <table className="min-w-full">
-              <thead>
-                <tr className={`${darkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
-                  <th className="py-2 px-4 border-b">Date</th>
-                  <th className="py-2 px-4 border-b">Status</th>
-                  <th className="py-2 px-4 border-b">Remarks</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td className="py-2 px-4 border-b">2023-10-01</td>
-                  <td className="py-2 px-4 border-b text-green-600">Present</td>
-                  <td className="py-2 px-4 border-b">-</td>
-                </tr>
-                <tr>
-                  <td className="py-2 px-4 border-b">2023-10-02</td>
-                  <td className="py-2 px-4 border-b text-red-600">Absent</td>
-                  <td className="py-2 px-4 border-b">Medical Leave</td>
-                </tr>
-                <tr>
-                  <td className="py-2 px-4 border-b">2023-10-03</td>
-                  <td className="py-2 px-4 border-b text-green-600">Present</td>
-                  <td className="py-2 px-4 border-b">-</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Notifications */}
-        <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} p-6 rounded-lg shadow-md mt-6`}>
-          <h3 className="text-xl font-semibold mb-4">Notifications</h3>
-          <div className="space-y-4">
-            <div className={`p-4 ${darkMode ? 'bg-blue-900' : 'bg-blue-50'} rounded-lg`}>
-              <p className={`${darkMode ? 'text-blue-300' : 'text-blue-800'}`}>Reminder: Submit your assignment by Friday.</p>
-            </div>
-            <div className={`p-4 ${darkMode ? 'bg-red-900' : 'bg-red-50'} rounded-lg`}>
-              <p className={`${darkMode ? 'text-red-300' : 'text-red-800'}`}>Warning: Low attendance in Mathematics.</p>
-            </div>
-            <div className={`p-4 ${darkMode ? 'bg-green-900' : 'bg-green-50'} rounded-lg`}>
-              <p className={`${darkMode ? 'text-green-300' : 'text-green-800'}`}>Congratulations! You have perfect attendance this week.</p>
+          {/* Timetable Section */}
+          <div className="mt-6">
+            <h3 className="text-xl font-semibold mb-6">Timetable</h3>
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+              {timetableData.map((day, index) => (
+                <div key={index} className={`p-4 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-50'} hover:shadow-md transition duration-300`}>
+                  <h4 className="font-semibold mb-3">{day.day}</h4>
+                  <ul className="space-y-2">
+                    {day.subjects.map((subject, idx) => (
+                      <li key={idx} className="text-sm text-gray-600">{subject}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
             </div>
           </div>
         </div>
