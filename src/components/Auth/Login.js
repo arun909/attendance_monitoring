@@ -1,27 +1,57 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '../supabaseClient';  // Import Supabase client
 
 const Login = () => {
-  const [role, setRole] = useState('student'); // Default role is 'student'
-  const [username, setUsername] = useState('');
+  const [role, setRole] = useState('student');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
 
-    // Dummy authentication for both Student and Teacher
-    if ((role === 'student' && username === 's' && password === 'p') || 
-        (role === 'teacher' && username === 's' && password === 'p')) {
-      // Redirect to the correct dashboard based on role
+    try {
+      // Step 1: Authenticate with Supabase
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+
+      if (authError) {
+        setError("Invalid email or password.");
+        return;
+      }
+
+      // Step 2: Fetch User Role from Supabase Database
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('role')
+        .eq('email', email)
+        .single();
+
+      if (userError || !userData) {
+        setError("User role not found.");
+        return;
+      }
+
+      // Step 3: Validate Role
+      if (userData.role !== role) {
+        setError(`Incorrect role. You are registered as a ${userData.role}.`);
+        return;
+      }
+
+      // Step 4: Redirect User Based on Role
       if (role === 'student') {
         navigate('/student-dashboard');
       } else if (role === 'teacher') {
         navigate('/teacher-dashboard');
       }
-    } else {
-      setError('Invalid username or password');
+    } catch (error) {
+      setError("An unexpected error occurred.");
+      console.error(error);
     }
   };
 
@@ -33,7 +63,6 @@ const Login = () => {
       <div className="bg-white p-8 rounded-lg shadow-2xl w-full max-w-md transform transition-all hover:scale-105 backdrop-blur-sm bg-opacity-90">
         <h2 className="text-3xl font-bold text-center mb-6 text-gray-800">Welcome Back!</h2>
 
-        {/* Error Message */}
         {error && <p className="text-red-500 text-center mb-4">{error}</p>}
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -66,56 +95,30 @@ const Login = () => {
             </div>
           </div>
 
-          {/* Username */}
+          {/* Email Input */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Username</label>
-            <div className="relative">
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="w-full p-3 pl-10 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Enter your username"
-              />
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-5 w-5 absolute top-3 left-3 text-gray-400"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            </div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Enter your email"
+              required
+            />
           </div>
 
-          {/* Password */}
+          {/* Password Input */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
-            <div className="relative">
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full p-3 pl-10 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Enter your password"
-              />
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-5 w-5 absolute top-3 left-3 text-gray-400"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M10 2a5 5 0 00-5 5v2a2 2 0 00-2 2v5a2 2 0 002 2h10a2 2 0 002-2v-5a2 2 0 00-2-2H7V7a3 3 0 016 0v2h1a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2h1V7a5 5 0 015-5z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            </div>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Enter your password"
+              required
+            />
           </div>
 
           {/* Submit Button */}
