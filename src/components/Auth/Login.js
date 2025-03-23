@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../supabaseClient';  // Import Supabase client
+import { supabase } from '../Auth/supabaseClient'; // Import Supabase client
 
 const Login = () => {
   const [role, setRole] = useState('student');
@@ -20,20 +20,32 @@ const Login = () => {
         password
       });
 
-      if (authError) {
+      console.log("Auth Response:", authData);
+      console.log("Auth Error:", authError);
+      if (authError || !authData.user) {
         setError("Invalid email or password.");
         return;
       }
+
+          const { data, error } = await supabase.from('users').select('*').limit(5); // Fetch first 5 users
+
+      if (error) {
+        console.error("Error fetching users:", error);
+      } else {
+        console.log("Users table data:", data);
+  }
 
       // Step 2: Fetch User Role from Supabase Database
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('role')
         .eq('email', email)
-        .single();
+        .maybeSingle(); // Prevents crash if no user is found
+         console.log(email);
+         console.log(userData);
 
       if (userError || !userData) {
-        setError("User role not found.");
+        setError("User role not found. Please contact admin.");
         return;
       }
 
@@ -44,13 +56,10 @@ const Login = () => {
       }
 
       // Step 4: Redirect User Based on Role
-      if (role === 'student') {
-        navigate('/student-dashboard');
-      } else if (role === 'teacher') {
-        navigate('/teacher-dashboard');
-      }
+      navigate(role === 'student' ? '/student-dashboard' : '/teacher-dashboard');
+
     } catch (error) {
-      setError("An unexpected error occurred.");
+      setError("An unexpected error occurred. Please try again.");
       console.error(error);
     }
   };

@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import Login from './components/Auth/Login';
 import StudentDash from './components/Student_dash';
 import TeacherDash from './components/Teacher_dash';
+import Attendance from './components/teacher/attendance';
 
 function App() {
   return (
@@ -13,6 +14,7 @@ function App() {
             <Route path="/" element={<Login />} />
             <Route path="/student-dashboard" element={<StudentDash />} />
             <Route path="/teacher-dashboard" element={<TeacherDash />} />
+            <Route path="/attendance" element={<Attendance />} />
           </Routes>
         </header>
       </div>

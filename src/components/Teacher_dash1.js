@@ -1,14 +1,10 @@
 import React, { useState } from 'react';
-import { supabase } from './Auth/supabaseClient'; // Import the Supabase client
-import { useNavigate } from 'react-router-dom';
 
 const TeacherDash = () => {
   const [darkMode, setDarkMode] = useState(false);
-  const [showAddStudentForm, setShowAddStudentForm] = useState(false);
-  const [studentName, setStudentName] = useState('');
-  const [studentEmail, setStudentMail] = useState('');
-  const [mailPassword, setAttendancePercentage] = useState('');
-  const [students, setStudents] = useState([
+
+  // Dummy data for students
+  const students = [
     { id: 1, name: 'John Doe', attendancePercentage: 92.5 },
     { id: 2, name: 'Jane Smith', attendancePercentage: 85.0 },
     { id: 3, name: 'Alice Johnson', attendancePercentage: 78.3 },
@@ -17,68 +13,31 @@ const TeacherDash = () => {
     { id: 6, name: 'Diana Evans', attendancePercentage: 91.2 },
     { id: 7, name: 'Ethan Green', attendancePercentage: 83.4 },
     { id: 8, name: 'Fiona Harris', attendancePercentage: 76.8 },
-  ]);
+  ];
 
+  // Dummy timetable data
+  const timetableData = [
+    { day: 'Monday', subjects: ['Math', 'Science', 'History'] },
+    { day: 'Tuesday', subjects: ['English', 'Physics', 'Chemistry'] },
+    { day: 'Wednesday', subjects: ['Biology', 'Geography', 'Math'] },
+    { day: 'Thursday', subjects: ['Science', 'History', 'English'] },
+    { day: 'Friday', subjects: ['Physics', 'Chemistry', 'Biology'] },
+  ];
+
+  // Calculate class attendance statistics
   const totalStudents = students.length;
   const averageAttendance =
     students.reduce((sum, student) => sum + student.attendancePercentage, 0) / totalStudents;
   const topPerformers = students
     .sort((a, b) => b.attendancePercentage - a.attendancePercentage)
-    .slice(0, 3);
+    .slice(0, 3); // Top 3 students
   const studentsNeedingAttention = students.filter(
     (student) => student.attendancePercentage < 80
-  );
+  ); // Students with < 80% attendance
 
+  // Toggle dark mode
   const toggleDarkMode = () => {
     setDarkMode(!darkMode);
-  };
-  
-  const navigate = useNavigate();
-  const handleAddStudent = async (e) => {
-    e.preventDefault();
-
-    // Generate a unique email for the student
-    const studentmail = `${studentEmail.replace(/\s+/g, '').toLowerCase()}`;
-    const password = mailPassword 
-    const name = studentName
-
-    // Sign up the student in Supabase Auth
-    const { data:user , error } = await supabase.auth.signUp({
-      email: studentmail,
-      password: password, // You can generate a random password or let the user set it
-    });
-
-    if (error) {
-      alert('Error adding student: ' + error.message);
-      return;
-    }
-
-    if (user){
-      alert('Student added successfully');
-      const { data, error: profileError } = await supabase
-     .from('users')
-     .insert([
-      { email: studentmail, role: 'student',name : name },
-    ]);
-    if ( profileError ) {
-      alert('Error adding student: ' + profileError.message);
-      console.log(profileError);
-    }  
-  }
-
-    // Add the student to the local state
-    const newStudent = {
-      id: students.length + 1,
-      studentEmail: studentEmail,
-      mailPassword: mailPassword,
-      studentName: studentName,
-    };
-
-    setStudents([...students, newStudent]); // Update the students list
-    setShowAddStudentForm(false); // Close the modal
-    setStudentMail(''); // Reset the form fields
-    setAttendancePercentage('');
-    setStudentName('');
   };
 
   return (
@@ -123,10 +82,9 @@ const TeacherDash = () => {
       <div className={`${darkMode ? 'bg-gray-700' : 'bg-white'} shadow-md`}>
         <div className="container mx-auto p-4 flex space-x-8">
           <a href="#" className={`${darkMode ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-800'} font-semibold text-lg`}>Dashboard</a>
-          <button onClick={() => navigate('/attendance')} className={`${darkMode ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-800'} font-semibold text-lg`}>Attendance</button>
-          {/* <a href="#" className={`${darkMode ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-800'} font-semibold text-lg`}>Attendance</a> */}
+          <a href="#" className={`${darkMode ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-800'} font-semibold text-lg`}>Attendance</a>
           <a href="#" className={`${darkMode ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-800'} font-semibold text-lg`}>Timetable</a>
-          <button onClick={() => setShowAddStudentForm(true)} className={`${darkMode ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-800'} font-semibold text-lg`}>Add Student</button>
+          <a href="#" className={`${darkMode ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-800'} font-semibold text-lg`}>Add Student</a>       
         </div>
       </div>
 
@@ -215,7 +173,7 @@ const TeacherDash = () => {
               >
                 <h4 className="font-semibold mb-2">Top Performers</h4>
                 <ul className="space-y-2">
-                  {topPerformers.map((student) => (
+                  {topPerformers.map((student, index) => (
                     <li key={student.id} className="flex justify-between">
                       <span>{student.name}</span>
                       <span className="font-semibold">{student.attendancePercentage}%</span>
@@ -247,74 +205,47 @@ const TeacherDash = () => {
           <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} p-6 rounded-lg shadow-md col-span-2`}>
             <h3 className="text-xl font-semibold mb-4">Timetable</h3>
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-              {/* Placeholder for timetable content */}
-              <div className="col-span-1">
-                <div className="p-4 bg-gray-100 rounded-lg shadow-md">Class 1</div>
-                <div className="p-4 bg-gray-100 rounded-lg shadow-md">Class 2</div>
-                <div className="p-4 bg-gray-100 rounded-lg shadow-md">Class 3</div>
-              </div>
-              <div className="col-span-1">
-                <div className="p-4 bg-gray-100 rounded-lg shadow-md">Class 4</div>
-                <div className="p-4 bg-gray-100 rounded-lg shadow-md">Class 5</div>
-              </div>
+              {timetableData.map((day, index) => (
+                <div
+                  key={index}
+                  className={`p-4 rounded-lg ${
+                    darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-50 hover:bg-gray-100'
+                  } transition duration-300`}
+                >
+                  <h4 className="font-semibold mb-2">{day.day}</h4>
+                  <ul className="space-y-1">
+                    {day.subjects.map((subject, idx) => (
+                      <li key={idx} className="text-sm">{subject}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Timetable Section */}
+          <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} p-6 rounded-lg shadow-md col-span-2`}>
+            <h3 className="text-xl font-semibold mb-4">Add Student</h3>
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+              {timetableData.map((day, index) => (
+                <div
+                  key={index}
+                  className={`p-4 rounded-lg ${
+                    darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-50 hover:bg-gray-100'
+                  } transition duration-300`}
+                >
+                  <h4 className="font-semibold mb-2">{day.day}</h4>
+                  <ul className="space-y-1">
+                    {day.subjects.map((subject, idx) => (
+                      <li key={idx} className="text-sm">{subject}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
             </div>
           </div>
         </div>
       </div>
-
-      {/* Add Student Modal */}
-      {showAddStudentForm && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center"
-          onClick={() => setShowAddStudentForm(false)}
-        >
-          <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-2xl font-semibold mb-4">Add Student</h2>
-            <form className="space-y-4" onSubmit={handleAddStudent}>
-              <div>
-                <label className="block text-sm font-medium mb-1">Name</label>
-                <input
-                  type="text"
-                  className="w-full p-2 rounded-md border"
-                  placeholder="Enter student's name"
-                  value={studentName}
-                  onChange={(e) => setStudentName(e.target.value)}
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Email</label>
-                <input
-                  type="text"
-                  className="w-full p-2 rounded-md border"
-                  placeholder="Enter student's mail address"
-                  value={studentEmail}
-                  onChange={(e) => setStudentMail(e.target.value)}
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Password</label>
-                <input
-                  type="password"
-                  className="w-full p-2 rounded-md border"
-                  placeholder="Enter password"
-                  value={mailPassword}
-                  onChange={(e) => setAttendancePercentage(e.target.value)}
-                  required
-                />
-              </div>
-              
-              <button
-                type="submit"
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-md"
-              >
-                Add Student
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
