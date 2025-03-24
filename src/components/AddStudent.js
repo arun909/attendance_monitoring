@@ -23,17 +23,6 @@ const AddStudent = () => {
 
       if (authError) throw authError;
 
-      // Step 2: Insert student details into the "students" table
-      const { error: dbError } = await supabase.from("students").insert([
-        {
-          id: authData.user.id, // Store the auth user ID
-          name,
-          email,
-        },
-      ]);
-
-      if (dbError) throw dbError;
-
       setMessage("✅ Student added successfully!");
       setName("");
       setEmail("");
@@ -78,6 +67,7 @@ const AddStudent = () => {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
+            minLength="6"
           />
         </div>
         <button

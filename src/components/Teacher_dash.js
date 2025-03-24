@@ -1,132 +1,187 @@
-import React, { useState } from 'react';
-import { supabase } from './Auth/supabaseClient'; // Import the Supabase client
+import React, { useState, useEffect } from 'react';
+import { supabase } from './Auth/supabaseClient';
 import { useNavigate } from 'react-router-dom';
 
 const TeacherDash = () => {
+  // State management
   const [darkMode, setDarkMode] = useState(false);
   const [showAddStudentForm, setShowAddStudentForm] = useState(false);
   const [studentName, setStudentName] = useState('');
   const [studentEmail, setStudentMail] = useState('');
-  const [mailPassword, setAttendancePercentage] = useState('');
-  const [students, setStudents] = useState([
-    { id: 1, name: 'John Doe', attendancePercentage: 92.5 },
-    { id: 2, name: 'Jane Smith', attendancePercentage: 85.0 },
-    { id: 3, name: 'Alice Johnson', attendancePercentage: 78.3 },
-    { id: 4, name: 'Bob Brown', attendancePercentage: 95.7 },
-    { id: 5, name: 'Charlie Davis', attendancePercentage: 88.9 },
-    { id: 6, name: 'Diana Evans', attendancePercentage: 91.2 },
-    { id: 7, name: 'Ethan Green', attendancePercentage: 83.4 },
-    { id: 8, name: 'Fiona Harris', attendancePercentage: 76.8 },
-  ]);
+  const [mailPassword, setMailPassword] = useState('');
+  const [students, setStudents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [timetableImage, setTimetableImage] = useState(null);
+  const [timetableImageUrl, setTimetableImageUrl] = useState('');
+  const [isUploadingTimetable, setIsUploadingTimetable] = useState(false);
 
-  const totalStudents = students.length;
-  const averageAttendance =
-    students.reduce((sum, student) => sum + student.attendancePercentage, 0) / totalStudents;
-  const topPerformers = students
-    .sort((a, b) => b.attendancePercentage - a.attendancePercentage)
-    .slice(0, 3);
-  const studentsNeedingAttention = students.filter(
-    (student) => student.attendancePercentage < 80
-  );
-
-  const toggleDarkMode = () => {
-    setDarkMode(!darkMode);
-  };
-  
   const navigate = useNavigate();
-  const handleAddStudent = async (e) => {
-    e.preventDefault();
 
-    // Generate a unique email for the student
-    const studentmail = `${studentEmail.replace(/\s+/g, '').toLowerCase()}`;
-    const password = mailPassword 
-    const name = studentName
+  // Fetch initial data
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        // Fetch students
+        const { data: studentsData, error: studentsError } = await supabase
+          .from('users')
+          .select('*')
+          .eq('role', 'student');
+        
+        if (studentsError) throw studentsError;
 
-    // Sign up the student in Supabase Auth
-    const { data:user , error } = await supabase.auth.signUp({
-      email: studentmail,
-      password: password, // You can generate a random password or let the user set it
-    });
+        // Fetch timetable
+        const { data: timetableData, error: timetableError } = await supabase
+          .from('timetable')
+          .select('image_url')
+          .order('created_at', { ascending: false })
+          .limit(1);
 
-    if (error) {
-      alert('Error adding student: ' + error.message);
-      return;
-    }
+        if (timetableError) throw timetableError;
 
-    if (user){
-      alert('Student added successfully');
-      const { data, error: profileError } = await supabase
-     .from('users')
-     .insert([
-      { email: studentmail, role: 'student',name : name },
-    ]);
-    if ( profileError ) {
-      alert('Error adding student: ' + profileError.message);
-      console.log(profileError);
-    }  
-  }
+        // Update state
+        if (studentsData) {
+          setStudents(studentsData.map(student => ({
+            id: student.id,
+            name: student.name,
+            email: student.email,
+            attendancePercentage: student.attendancePercentage || 75 + Math.floor(Math.random() * 20)
+          })));
+        }
 
-    // Add the student to the local state
-    const newStudent = {
-      id: students.length + 1,
-      studentEmail: studentEmail,
-      mailPassword: mailPassword,
-      studentName: studentName,
+        if (timetableData?.[0]?.image_url) {
+          setTimetableImageUrl(timetableData[0].image_url);
+        }
+      } catch (error) {
+        console.error('Error fetching data:', error);
+      } finally {
+        setLoading(false);
+      }
     };
 
-    setStudents([...students, newStudent]); // Update the students list
-    setShowAddStudentForm(false); // Close the modal
-    setStudentMail(''); // Reset the form fields
-    setAttendancePercentage('');
-    setStudentName('');
+    fetchData();
+  }, []);
+
+  // Calculate statistics
+  const totalStudents = students.length;
+  const averageAttendance = students.reduce((sum, student) => sum + student.attendancePercentage, 0) / totalStudents || 0;
+  const topPerformers = [...students].sort((a, b) => b.attendancePercentage - a.attendancePercentage).slice(0, 3);
+  const studentsNeedingAttention = students.filter(student => student.attendancePercentage < 80);
+
+  // Handle timetable upload
+  const handleTimetableUpload = async (e) => {
+    e.preventDefault();
+    if (!timetableImage) return;
+
+    setIsUploadingTimetable(true);
+    try {
+      // Upload to storage
+      const fileExt = timetableImage.name.split('.').pop();
+      const fileName = `timetable_${Date.now()}.${fileExt}`;
+      const filePath = `timetables/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('timetable-images')
+        .upload(filePath, timetableImage);
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('timetable-images')
+        .getPublicUrl(filePath);
+
+      // Save to database
+      const { error: dbError } = await supabase
+        .from('timetable')
+        .insert([{ image_url: publicUrl }]);
+
+      if (dbError) throw dbError;
+
+      setTimetableImageUrl(publicUrl);
+      setTimetableImage(null);
+    } catch (error) {
+      console.error('Timetable upload failed:', error);
+      alert('Failed to upload timetable');
+    } finally {
+      setIsUploadingTimetable(false);
+    }
+  };
+
+  // Handle student addition
+  const handleAddStudent = async (e) => {
+    e.preventDefault();
+    try {
+      // Create auth user
+      const { data: user, error: authError } = await supabase.auth.signUp({
+        email: studentEmail,
+        password: mailPassword,
+      });
+
+      if (authError) throw authError;
+
+      // Add to users table
+      const { error: dbError } = await supabase
+        .from('users')
+        .insert([{
+          email: studentEmail,
+          name: studentName,
+          role: 'student',
+          attendancePercentage: 100
+        }]);
+
+      if (dbError) throw dbError;
+
+      // Update local state
+      setStudents([...students, {
+        id: students.length + 1,
+        name: studentName,
+        email: studentEmail,
+        attendancePercentage: 100
+      }]);
+
+      // Reset form
+      setShowAddStudentForm(false);
+      setStudentName('');
+      setStudentMail('');
+      setMailPassword('');
+    } catch (error) {
+      console.error('Failed to add student:', error);
+      alert(error.message);
+    }
   };
 
   return (
     <div className={`min-h-screen ${darkMode ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-900'}`}>
-      {/* Custom Navbar */}
+      {/* Header */}
       <div className={`${darkMode ? 'bg-gray-800' : 'bg-gradient-to-r from-blue-700 to-indigo-700'} text-white p-4 shadow-lg`}>
         <div className="container mx-auto flex justify-between items-center">
           <h2 className="text-2xl font-semibold">Teacher Dashboard</h2>
           <div className="flex space-x-4">
-            {/* Dark Mode Toggle Button */}
             <button
-              onClick={toggleDarkMode}
+              onClick={() => setDarkMode(!darkMode)}
               className={`p-2 rounded-full ${darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-blue-600 hover:bg-blue-700'}`}
+              aria-label="Toggle dark mode"
             >
-              {darkMode ? (
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-                </svg>
-              ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                </svg>
-              )}
+              {darkMode ? '☀️' : '🌙'}
             </button>
-            <button className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-md transition duration-300 flex items-center">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
-              </svg>
-              Profile
+            <button className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-md flex items-center">
+              👤 Profile
             </button>
-            <button className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-md transition duration-300 flex items-center">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M3 3a1 1 0 011 1v12a1 1 0 11-2 0V4a1 1 0 011-1zm7.707 3.293a1 1 0 010 1.414L9.414 9H17a1 1 0 110 2H9.414l1.293 1.293a1 1 0 01-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0z" clipRule="evenodd" />
-              </svg>
-              Logout
+            <button className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-md flex items-center">
+              🚪 Logout
             </button>
           </div>
         </div>
       </div>
 
-      {/* Navigation Bar */}
+      {/* Navigation */}
       <div className={`${darkMode ? 'bg-gray-700' : 'bg-white'} shadow-md`}>
         <div className="container mx-auto p-4 flex space-x-8">
-          <a href="#" className={`${darkMode ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-800'} font-semibold text-lg`}>Dashboard</a>
-          <button onClick={() => navigate('/attendance')} className={`${darkMode ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-800'} font-semibold text-lg`}>Attendance</button>
-          {/* <a href="#" className={`${darkMode ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-800'} font-semibold text-lg`}>Attendance</a> */}
-          <a href="#" className={`${darkMode ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-800'} font-semibold text-lg`}>Timetable</a>
-          <button onClick={() => setShowAddStudentForm(true)} className={`${darkMode ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-800'} font-semibold text-lg`}>Add Student</button>
+          <button className={`${darkMode ? 'text-blue-400' : 'text-blue-600'} font-semibold`}>Dashboard</button>
+          <button onClick={() => navigate('/attendance')} className={`${darkMode ? 'text-blue-400' : 'text-blue-600'} font-semibold`}>Attendance</button>
+          <button className={`${darkMode ? 'text-blue-400' : 'text-blue-600'} font-semibold`}>Timetable</button>
+          <button onClick={() => setShowAddStudentForm(true)} className={`${darkMode ? 'text-blue-400' : 'text-blue-600'} font-semibold`}>Add Student</button>
         </div>
       </div>
 
@@ -136,106 +191,61 @@ const TeacherDash = () => {
           {/* Students List */}
           <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} p-6 rounded-lg shadow-md`}>
             <h3 className="text-xl font-semibold mb-4">Students List</h3>
-            <div className="space-y-4 h-[400px] overflow-y-auto pr-4">
-              {students.map((student) => (
-                <div
-                  key={student.id}
-                  className={`flex justify-between items-center p-3 rounded-lg ${
-                    darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-50 hover:bg-gray-100'
-                  } transition duration-300`}
-                >
-                  <span className="font-medium">{student.name}</span>
-                  <span className="font-semibold">{student.attendancePercentage}%</span>
-                </div>
-              ))}
+            <div className="space-y-4 max-h-[400px] overflow-y-auto">
+              {loading ? (
+                <p className="text-center py-4">Loading...</p>
+              ) : students.length === 0 ? (
+                <p className="text-center py-4">No students found</p>
+              ) : (
+                students.map(student => (
+                  <div key={student.id} className={`p-3 rounded-lg flex justify-between items-center ${
+                    darkMode ? 'bg-gray-700' : 'bg-gray-50'
+                  }`}>
+                    <span>{student.name}</span>
+                    <span className="font-bold">{student.attendancePercentage}%</span>
+                  </div>
+                ))
+              )}
             </div>
           </div>
 
-          {/* Add Class Section */}
+          {/* Add Class Form */}
           <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} p-6 rounded-lg shadow-md`}>
             <h3 className="text-xl font-semibold mb-4">Add Class</h3>
             <form className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-1">Class Name</label>
-                <input
-                  type="text"
-                  className={`w-full p-2 rounded-md ${
-                    darkMode ? 'bg-gray-700 text-white' : 'bg-gray-100 text-gray-900'
-                  }`}
-                  placeholder="Enter class name"
-                />
+                <label className="block mb-1">Class Name</label>
+                <input type="text" className={`w-full p-2 rounded ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`} />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Date</label>
-                <input
-                  type="date"
-                  className={`w-full p-2 rounded-md ${
-                    darkMode ? 'bg-gray-700 text-white' : 'bg-gray-100 text-gray-900'
-                  }`}
-                />
+                <label className="block mb-1">Date</label>
+                <input type="date" className={`w-full p-2 rounded ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`} />
               </div>
-              <button
-                type="submit"
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-md transition duration-300"
-              >
+              <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded">
                 Add Class
               </button>
             </form>
           </div>
 
-          {/* Class Attendance Overview */}
+          {/* Attendance Overview */}
           <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} p-6 rounded-lg shadow-md`}>
-            <h3 className="text-xl font-semibold mb-4">Class Attendance Overview</h3>
-            <div className="space-y-6">
-              {/* Total Students */}
-              <div
-                className={`p-4 rounded-lg ${
-                  darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-50 hover:bg-gray-100'
-                } transition duration-300`}
-              >
-                <h4 className="font-semibold">Total Students</h4>
+            <h3 className="text-xl font-semibold mb-4">Attendance Overview</h3>
+            <div className="space-y-4">
+              <div className={`p-4 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                <h4>Total Students</h4>
                 <p className="text-2xl font-bold">{totalStudents}</p>
               </div>
-
-              {/* Average Attendance Percentage */}
-              <div
-                className={`p-4 rounded-lg ${
-                  darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-50 hover:bg-gray-100'
-                } transition duration-300`}
-              >
-                <h4 className="font-semibold">Average Attendance</h4>
-                <p className="text-2xl font-bold">{averageAttendance.toFixed(2)}%</p>
+              <div className={`p-4 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                <h4>Average Attendance</h4>
+                <p className="text-2xl font-bold">{averageAttendance.toFixed(1)}%</p>
               </div>
-
-              {/* Top Performers */}
-              <div
-                className={`p-4 rounded-lg ${
-                  darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-50 hover:bg-gray-100'
-                } transition duration-300`}
-              >
-                <h4 className="font-semibold mb-2">Top Performers</h4>
+              <div className={`p-4 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                <h4>Top Performers</h4>
                 <ul className="space-y-2">
-                  {topPerformers.map((student) => (
+                  {topPerformers.map(student => (
                     <li key={student.id} className="flex justify-between">
                       <span>{student.name}</span>
-                      <span className="font-semibold">{student.attendancePercentage}%</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              {/* Students Needing Attention */}
-              <div
-                className={`p-4 rounded-lg ${
-                  darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-50 hover:bg-gray-100'
-                } transition duration-300`}
-              >
-                <h4 className="font-semibold mb-2">Students Needing Attention</h4>
-                <ul className="space-y-2">
-                  {studentsNeedingAttention.map((student) => (
-                    <li key={student.id} className="flex justify-between">
-                      <span>{student.name}</span>
-                      <span className="font-semibold text-red-600">{student.attendancePercentage}%</span>
+                      <span className="font-bold">{student.attendancePercentage}%</span>
                     </li>
                   ))}
                 </ul>
@@ -244,19 +254,44 @@ const TeacherDash = () => {
           </div>
 
           {/* Timetable Section */}
-          <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} p-6 rounded-lg shadow-md col-span-2`}>
-            <h3 className="text-xl font-semibold mb-4">Timetable</h3>
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-              {/* Placeholder for timetable content */}
-              <div className="col-span-1">
-                <div className="p-4 bg-gray-100 rounded-lg shadow-md">Class 1</div>
-                <div className="p-4 bg-gray-100 rounded-lg shadow-md">Class 2</div>
-                <div className="p-4 bg-gray-100 rounded-lg shadow-md">Class 3</div>
+          <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} p-6 rounded-lg shadow-md col-span-3`}>
+            <h3 className="text-xl font-semibold mb-4">Class Timetable</h3>
+            <form onSubmit={handleTimetableUpload} className="mb-6 flex flex-col md:flex-row gap-4">
+              <div className="flex-grow">
+                <label className="block mb-1">Upload Timetable (Image)</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setTimetableImage(e.target.files?.[0])}
+                  className={`w-full p-2 rounded ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`}
+                  disabled={isUploadingTimetable}
+                />
               </div>
-              <div className="col-span-1">
-                <div className="p-4 bg-gray-100 rounded-lg shadow-md">Class 4</div>
-                <div className="p-4 bg-gray-100 rounded-lg shadow-md">Class 5</div>
-              </div>
+              <button
+                type="submit"
+                disabled={!timetableImage || isUploadingTimetable}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded self-end"
+              >
+                {isUploadingTimetable ? 'Uploading...' : 'Upload'}
+              </button>
+            </form>
+            <div className="border rounded-lg overflow-hidden">
+              {timetableImageUrl ? (
+                <>
+                  <img
+                    src={timetableImageUrl}
+                    alt="Class timetable"
+                    className="w-full h-auto max-h-[600px] object-contain"
+                  />
+                  <div className={`p-2 text-center ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                    Current Timetable
+                  </div>
+                </>
+              ) : (
+                <div className={`p-8 text-center ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                  No timetable available
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -264,53 +299,58 @@ const TeacherDash = () => {
 
       {/* Add Student Modal */}
       {showAddStudentForm && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center"
-          onClick={() => setShowAddStudentForm(false)}
-        >
-          <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-2xl font-semibold mb-4">Add Student</h2>
-            <form className="space-y-4" onSubmit={handleAddStudent}>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+          <div
+            className={`${darkMode ? 'bg-gray-800' : 'bg-white'} p-6 rounded-lg w-full max-w-md`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-xl font-semibold mb-4">Add Student</h3>
+            <form onSubmit={handleAddStudent} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-1">Name</label>
+                <label className="block mb-1">Name</label>
                 <input
                   type="text"
-                  className="w-full p-2 rounded-md border"
-                  placeholder="Enter student's name"
                   value={studentName}
                   onChange={(e) => setStudentName(e.target.value)}
+                  className={`w-full p-2 rounded ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`}
                   required
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Email</label>
+                <label className="block mb-1">Email</label>
                 <input
-                  type="text"
-                  className="w-full p-2 rounded-md border"
-                  placeholder="Enter student's mail address"
+                  type="email"
                   value={studentEmail}
                   onChange={(e) => setStudentMail(e.target.value)}
+                  className={`w-full p-2 rounded ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`}
                   required
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Password</label>
+                <label className="block mb-1">Password</label>
                 <input
                   type="password"
-                  className="w-full p-2 rounded-md border"
-                  placeholder="Enter password"
                   value={mailPassword}
-                  onChange={(e) => setAttendancePercentage(e.target.value)}
+                  onChange={(e) => setMailPassword(e.target.value)}
+                  className={`w-full p-2 rounded ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`}
                   required
                 />
               </div>
-              
-              <button
-                type="submit"
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-md"
-              >
-                Add Student
-              </button>
+              <div className="flex justify-end space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddStudentForm(false)}
+                  className="px-4 py-2 rounded border"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
+                >
+                  Add Student
+                </button>
+              </div>
             </form>
           </div>
         </div>

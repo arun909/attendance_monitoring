@@ -2,20 +2,29 @@ import React, { useState } from "react";
 import { supabase } from "../Auth/supabaseClient";
 
 const Attendance = () => {
-    const [firstFile, setFirstFile] = useState(null);
-    const [lastFile, setLastFile] = useState(null);
+    const [selectedDate, setSelectedDate] = useState("");
+    const [selectedPeriod, setSelectedPeriod] = useState("");
+    const [selectedSubject, setSelectedSubject] = useState("");
+    const [attendanceFile, setAttendanceFile] = useState(null);
     const [attendanceData, setAttendanceData] = useState([]);
-    const [isLoading, setIsLoading] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
 
-    // Handle file selection
-    const handleFileChange = (event, setFile) => {
+    // List of subjects
+    const subjects = [
+        "Operating System",
+        "Data Analytics",
+        "Data Communication",
+        "Mobile Communication",
+        "Database Systems",
+        "Computer Networks"
+    ];
+
+    const handleFileChange = (event) => {
         const file = event.target.files[0];
-        setFile(file);
+        setAttendanceFile(file);
     };
 
-    // Read file contents
-    const readFile = (file) => {
+    const readCSVFile = (file) => {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
             reader.onload = (e) => {
@@ -23,174 +32,145 @@ const Attendance = () => {
                     .split("\n")
                     .map(line => line.trim())
                     .filter(line => line);
-                resolve(lines);
+
+                const data = lines.map(line => {
+                    const [name, status] = line.split(",");
+                    return { 
+                        name: name.trim(), 
+                        present: status.trim().toLowerCase() === "present" 
+                    };
+                });
+
+                resolve(data);
             };
             reader.onerror = (error) => reject(error);
             reader.readAsText(file);
         });
     };
 
-    // Evaluate attendance
-    const evaluateAttendance = async () => {
-        if (!firstFile || !lastFile) {
-            alert("Please upload both attendance files.");
+    const uploadAttendance = async () => {
+        if (!selectedDate || !selectedPeriod || !selectedSubject || !attendanceFile) {
+            alert("Please select date, class hour, subject, and upload a file.");
             return;
         }
-
-        setIsLoading(true);
-        try {
-            const firstFileData = await readFile(firstFile);
-            const lastFileData = await readFile(lastFile);
-
-            const firstSet = new Set(firstFileData);
-            const lastSet = new Set(lastFileData);
-
-            const students = new Set([...firstFileData, ...lastFileData]);
-            const finalAttendance = Array.from(students).map((name, index) => ({
-                id: index + 1,
-                name,
-                present: firstSet.has(name) && lastSet.has(name),
-            }));
-
-            setAttendanceData(finalAttendance);
-            alert("Attendance evaluated successfully.");
-        } catch (error) {
-            console.error("Error reading files:", error);
-            alert("Failed to process attendance files.");
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    // Save attendance to Supabase
-    const markAttendance = async () => {
-        if (attendanceData.length === 0) {
-            alert("No attendance data to save.");
-            return;
-        }
-
+    
         setIsUploading(true);
         try {
-            const currentDate = new Date();
-            const dateString = currentDate.toISOString().split("T")[0]; // YYYY-MM-DD
-            const timeString = currentDate.toTimeString().split(" ")[0].replace(/:/g, "-"); // HH-MM-SS
-            const columnName = `${dateString}_${timeString}`;
-
-            // Ensure column exists
-            await supabase.rpc("add_column_if_not_exists", { column_name: columnName });
-
-            // Fetch all students
-            const { data: students, error: fetchError } = await supabase
+            const students = await readCSVFile(attendanceFile);
+            setAttendanceData(students);
+            
+            const attendanceRecord = {
+                date: selectedDate,
+                period: selectedPeriod,
+                subject: selectedSubject,
+                students: students,
+                created_at: new Date().toISOString()
+            };
+    
+            const { data, error } = await supabase
                 .from("attendance")
-                .select("*");
-
-            if (fetchError) throw fetchError;
-
-            for (const student of attendanceData) {
-                const studentRecord = students.find((s) => s.student_name === student.name);
-
-                if (studentRecord) {
-                    // Update existing record
-                    const { error: updateError } = await supabase
-                        .from("attendance")
-                        .update({ [columnName]: student.present ? "Present" : "Absent" })
-                        .eq("student_name", student.name);
-
-                    if (updateError) throw updateError;
-                } else {
-                    // Insert new record
-                    const { error: insertError } = await supabase
-                        .from("attendance")
-                        .insert({
-                            student_name: student.name,
-                            [columnName]: student.present ? "Present" : "Absent",
-                        });
-
-                    if (insertError) throw insertError;
-                }
-            }
-
-            alert(`Attendance saved in column: ${columnName}`);
+                .insert([attendanceRecord])
+                .select();
+    
+            if (error) throw error;
+            
+            alert("Attendance successfully saved!");
         } catch (error) {
             console.error("Error saving attendance:", error);
-            alert("Failed to save attendance.");
+            alert(`Failed to save attendance: ${error.message}`);
         } finally {
             setIsUploading(false);
         }
     };
-
+    
     return (
-        <div className="min-h-screen bg-gray-100 p-6">
-            <h1 className="text-3xl font-semibold mb-6 text-center text-blue-600">
-                Attendance Management
-            </h1>
+        <div className="min-h-screen bg-gray-50 p-6 flex flex-col items-center">
+            <h1 className="text-4xl font-semibold text-blue-600 mb-6">Attendance Management</h1>
 
-            {/* File Upload Inputs */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <div>
-                    <label className="block text-sm font-medium mb-2">
-                        Upload First 10-Minute File
-                    </label>
-                    <input
-                        type="file"
-                        accept=".txt"
-                        onChange={(e) => handleFileChange(e, setFirstFile)}
-                        className="w-full p-2 border rounded-md"
-                    />
-                </div>
-                <div>
-                    <label className="block text-sm font-medium mb-2">
-                        Upload Last 10-Minute File
-                    </label>
-                    <input
-                        type="file"
-                        accept=".txt"
-                        onChange={(e) => handleFileChange(e, setLastFile)}
-                        className="w-full p-2 border rounded-md"
-                    />
-                </div>
-            </div>
+            <div className="w-full max-w-2xl bg-white p-6 rounded-lg shadow-lg">
+                {/* Date Picker */}
+                <label className="block text-gray-700 font-medium mb-2">Select Date:</label>
+                <input
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="w-full p-2 border rounded-md mb-4"
+                />
 
-            {/* Buttons */}
-            <div className="flex flex-wrap gap-4 mb-6">
-                <button
-                    onClick={evaluateAttendance}
-                    disabled={isLoading}
-                    className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:bg-green-300"
+                {/* Class Hour Selection */}
+                <label className="block text-gray-700 font-medium mb-2">Select Class Hour:</label>
+                <select
+                    value={selectedPeriod}
+                    onChange={(e) => setSelectedPeriod(e.target.value)}
+                    className="w-full p-2 border rounded-md mb-4"
                 >
-                    {isLoading ? "Evaluating..." : "Evaluate Attendance"}
-                </button>
+                    <option value="">-- Select Period --</option>
+                    <option value="1">1st Hour</option>
+                    <option value="2">2nd Hour</option>
+                    <option value="3">3rd Hour</option>
+                    <option value="4">4th Hour</option>
+                    <option value="5">5th Hour</option>
+                    <option value="6">6th Hour</option>
+                </select>
 
-                {attendanceData.length > 0 && (
-                    <button
-                        onClick={markAttendance}
-                        disabled={isUploading}
-                        className="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 disabled:bg-purple-300"
-                    >
-                        {isUploading ? "Saving..." : "Save to Database"}
-                    </button>
-                )}
+                {/* Subject Selection */}
+                <label className="block text-gray-700 font-medium mb-2">Select Subject:</label>
+                <select
+                    value={selectedSubject}
+                    onChange={(e) => setSelectedSubject(e.target.value)}
+                    className="w-full p-2 border rounded-md mb-4"
+                >
+                    <option value="">-- Select Subject --</option>
+                    {subjects.map((subject, index) => (
+                        <option key={index} value={subject}>{subject}</option>
+                    ))}
+                </select>
+
+                {/* File Upload */}
+                <label className="block text-gray-700 font-medium mb-2">Upload Attendance File (CSV):</label>
+                <input
+                    type="file"
+                    accept=".csv"
+                    onChange={handleFileChange}
+                    className="w-full p-2 border rounded-md mb-6"
+                />
+
+                {/* Upload Button */}
+                <button
+                    onClick={uploadAttendance}
+                    disabled={isUploading}
+                    className="w-full bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:bg-green-300"
+                >
+                    {isUploading ? "Uploading..." : "Upload Attendance"}
+                </button>
             </div>
 
             {/* Display Attendance Data */}
             {attendanceData.length > 0 && (
-                <div className="mb-6">
-                    <h2 className="text-xl font-semibold mb-4 text-gray-700">Attendance Data</h2>
+                <div className="w-full max-w-2xl mt-6">
+                    <h2 className="text-xl font-semibold mb-4 text-gray-700">Uploaded Attendance</h2>
+                    <div className="mb-4">
+                        <p><strong>Date:</strong> {selectedDate}</p>
+                        <p><strong>Period:</strong> {selectedPeriod}</p>
+                        <p><strong>Subject:</strong> {selectedSubject}</p>
+                    </div>
                     <table className="w-full border-collapse border border-gray-300 shadow-md">
                         <thead>
                             <tr className="bg-gray-200">
-                                <th className="border border-gray-300 p-2">ID</th>
                                 <th className="border border-gray-300 p-2">Name</th>
                                 <th className="border border-gray-300 p-2">Status</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {attendanceData.map((student) => (
-                                <tr key={student.id} className="bg-white">
-                                    <td className="border border-gray-300 p-2">{student.id}</td>
+                            {attendanceData.map((student, index) => (
+                                <tr key={index} className="bg-white">
                                     <td className="border border-gray-300 p-2">{student.name}</td>
                                     <td className="border border-gray-300 p-2">
-                                        {student.present ? "Present" : "Absent"}
+                                        {student.present ? (
+                                            <span className="text-green-600">Present</span>
+                                        ) : (
+                                            <span className="text-red-600">Absent</span>
+                                        )}
                                     </td>
                                 </tr>
                             ))}
