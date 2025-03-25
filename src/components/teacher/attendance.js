@@ -1,15 +1,13 @@
 import React, { useState } from "react";
-import { supabase } from "../Auth/supabaseClient";
 
 const Attendance = () => {
     const [selectedDate, setSelectedDate] = useState("");
     const [selectedPeriod, setSelectedPeriod] = useState("");
     const [selectedSubject, setSelectedSubject] = useState("");
-    const [attendanceFile, setAttendanceFile] = useState(null);
-    const [attendanceData, setAttendanceData] = useState([]);
+    const [attendanceData, setAttendanceData] = useState(null);
     const [isUploading, setIsUploading] = useState(false);
+    const [captureStatus, setCaptureStatus] = useState("");
 
-    // List of subjects
     const subjects = [
         "Operating System",
         "Data Analytics",
@@ -19,65 +17,72 @@ const Attendance = () => {
         "Computer Networks"
     ];
 
-    const handleFileChange = (event) => {
-        const file = event.target.files[0];
-        setAttendanceFile(file);
-    };
-
-    const readCSVFile = (file) => {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const lines = e.target.result
-                    .split("\n")
-                    .map(line => line.trim())
-                    .filter(line => line);
-
-                const data = lines.map(line => {
-                    const [name, status] = line.split(",");
-                    return { 
-                        name: name.trim(), 
-                        present: status.trim().toLowerCase() === "present" 
-                    };
-                });
-
-                resolve(data);
-            };
-            reader.onerror = (error) => reject(error);
-            reader.readAsText(file);
-        });
-    };
-
-    const uploadAttendance = async () => {
-        if (!selectedDate || !selectedPeriod || !selectedSubject || !attendanceFile) {
-            alert("Please select date, class hour, subject, and upload a file.");
+    const captureAttendance = async () => {
+        if (!selectedDate || !selectedPeriod || !selectedSubject) {
+            alert("Please select date, class hour, and subject.");
             return;
         }
     
         setIsUploading(true);
+        setCaptureStatus("Starting face detection...");
+        setAttendanceData(null);
+        
         try {
-            const students = await readCSVFile(attendanceFile);
-            setAttendanceData(students);
+            // Start the capture process
+            const response = await fetch('http://localhost:5000/capture_attendance', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    date: selectedDate,
+                    period: selectedPeriod,
+                    subject: selectedSubject
+                })
+            });
             
-            const attendanceRecord = {
-                date: selectedDate,
-                period: selectedPeriod,
-                subject: selectedSubject,
-                students: students,
-                created_at: new Date().toISOString()
-            };
-    
-            const { data, error } = await supabase
-                .from("attendance")
-                .insert([attendanceRecord])
-                .select();
-    
-            if (error) throw error;
+            if (!response.ok) {
+                throw new Error('Failed to start attendance capture');
+            }
+
+            // Poll for status updates
+            let isComplete = false;
+            let attempts = 0;
+            const maxAttempts = 300;
             
-            alert("Attendance successfully saved!");
+            while (attempts < maxAttempts && !isComplete) {
+                attempts++;
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                
+                const statusResponse = await fetch('http://localhost:5000/get_status');
+                const statusData = await statusResponse.json();
+                
+                setCaptureStatus(`${statusData.message || 'Processing...'} (${attempts * 2}s)`);
+                
+                if (statusData.status !== 'processing') {
+                    isComplete = true;
+                    
+                    // Get the final attendance data
+                    const resultResponse = await fetch('http://localhost:5000/get_attendance');
+                    const resultData = await resultResponse.json();
+                    
+                    if (resultData.status === 'complete') {
+                        setAttendanceData(resultData.data);
+                    } else {
+                        throw new Error(resultData.message || 'Failed to get attendance results');
+                    }
+                }
+            }
+
+            if (!isComplete) {
+                throw new Error('Capture timed out');
+            }
+            
+            alert("Attendance successfully processed!");
         } catch (error) {
-            console.error("Error saving attendance:", error);
-            alert(`Failed to save attendance: ${error.message}`);
+            console.error("Error processing attendance:", error);
+            setCaptureStatus(`Error: ${error.message}`);
+            alert(`Failed to process attendance: ${error.message}`);
         } finally {
             setIsUploading(false);
         }
@@ -88,7 +93,6 @@ const Attendance = () => {
             <h1 className="text-4xl font-semibold text-blue-600 mb-6">Attendance Management</h1>
 
             <div className="w-full max-w-2xl bg-white p-6 rounded-lg shadow-lg">
-                {/* Date Picker */}
                 <label className="block text-gray-700 font-medium mb-2">Select Date:</label>
                 <input
                     type="date"
@@ -97,7 +101,6 @@ const Attendance = () => {
                     className="w-full p-2 border rounded-md mb-4"
                 />
 
-                {/* Class Hour Selection */}
                 <label className="block text-gray-700 font-medium mb-2">Select Class Hour:</label>
                 <select
                     value={selectedPeriod}
@@ -113,12 +116,11 @@ const Attendance = () => {
                     <option value="6">6th Hour</option>
                 </select>
 
-                {/* Subject Selection */}
                 <label className="block text-gray-700 font-medium mb-2">Select Subject:</label>
                 <select
                     value={selectedSubject}
                     onChange={(e) => setSelectedSubject(e.target.value)}
-                    className="w-full p-2 border rounded-md mb-4"
+                    className="w-full p-2 border rounded-md mb-6"
                 >
                     <option value="">-- Select Subject --</option>
                     {subjects.map((subject, index) => (
@@ -126,56 +128,68 @@ const Attendance = () => {
                     ))}
                 </select>
 
-                {/* File Upload */}
-                <label className="block text-gray-700 font-medium mb-2">Upload Attendance File (CSV):</label>
-                <input
-                    type="file"
-                    accept=".csv"
-                    onChange={handleFileChange}
-                    className="w-full p-2 border rounded-md mb-6"
-                />
-
-                {/* Upload Button */}
                 <button
-                    onClick={uploadAttendance}
+                    onClick={captureAttendance}
                     disabled={isUploading}
                     className="w-full bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:bg-green-300"
                 >
-                    {isUploading ? "Uploading..." : "Upload Attendance"}
+                    {isUploading ? "Capturing Attendance..." : "Capture Attendance"}
                 </button>
+
+                {captureStatus && (
+                    <div className="mt-4 p-2 bg-blue-100 text-blue-800 rounded">
+                        {captureStatus}
+                    </div>
+                )}
             </div>
 
-            {/* Display Attendance Data */}
-            {attendanceData.length > 0 && (
-                <div className="w-full max-w-2xl mt-6">
-                    <h2 className="text-xl font-semibold mb-4 text-gray-700">Uploaded Attendance</h2>
-                    <div className="mb-4">
-                        <p><strong>Date:</strong> {selectedDate}</p>
-                        <p><strong>Period:</strong> {selectedPeriod}</p>
-                        <p><strong>Subject:</strong> {selectedSubject}</p>
+            {attendanceData && (
+                <div className="w-full max-w-4xl mt-6">
+                    <div className="bg-white p-6 rounded-lg shadow-md">
+                        <div className="mb-4">
+                            <h2 className="text-xl font-semibold text-gray-800">
+                                {attendanceData.subject} - Period {attendanceData.period} ({attendanceData.date})
+                            </h2>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="bg-blue-50 p-4 rounded">
+                                <h3 className="font-medium text-blue-800 mb-2">First 10 Seconds</h3>
+                                <ul className="space-y-1">
+                                    {attendanceData.First10
+                                        .filter(name => name && name !== 'None')
+                                        .map((name, i) => (
+                                            <li key={i} className="text-blue-700">{name}</li>
+                                        ))
+                                    }
+                                </ul>
+                            </div>
+                            
+                            <div className="bg-purple-50 p-4 rounded">
+                                <h3 className="font-medium text-purple-800 mb-2">Last 10 Seconds</h3>
+                                <ul className="space-y-1">
+                                    {attendanceData.last10
+                                        .filter(name => name && name !== 'None')
+                                        .map((name, i) => (
+                                            <li key={i} className="text-purple-700">{name}</li>
+                                        ))
+                                    }
+                                </ul>
+                            </div>
+                            
+                            <div className="bg-green-50 p-4 rounded">
+                                <h3 className="font-medium text-green-800 mb-2">Confirmed Present</h3>
+                                <ul className="space-y-1">
+                                    {attendanceData.real
+                                        .filter(name => name && name !== 'None')
+                                        .map((name, i) => (
+                                            <li key={i} className="text-green-700">{name}</li>
+                                        ))
+                                    }
+                                </ul>
+                            </div>
+                        </div>
                     </div>
-                    <table className="w-full border-collapse border border-gray-300 shadow-md">
-                        <thead>
-                            <tr className="bg-gray-200">
-                                <th className="border border-gray-300 p-2">Name</th>
-                                <th className="border border-gray-300 p-2">Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {attendanceData.map((student, index) => (
-                                <tr key={index} className="bg-white">
-                                    <td className="border border-gray-300 p-2">{student.name}</td>
-                                    <td className="border border-gray-300 p-2">
-                                        {student.present ? (
-                                            <span className="text-green-600">Present</span>
-                                        ) : (
-                                            <span className="text-red-600">Absent</span>
-                                        )}
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
                 </div>
             )}
         </div>
