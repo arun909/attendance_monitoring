@@ -13,14 +13,15 @@ const AddStudent = () => {
   const [formErrors, setFormErrors] = useState({});
   const navigate = useNavigate();
 
-  // Webcam and directory states
+  // Webcam states
   const [showWebcam, setShowWebcam] = useState(false);
   const [capturedImages, setCapturedImages] = useState([]);
   const [captureCount, setCaptureCount] = useState(0);
-  const [customDirectoryPath, setCustomDirectoryPath] = useState('');
-  const [directoryHandle, setDirectoryHandle] = useState(null);
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
+
+  // Hardcoded directory path
+  const customDirectoryPath = "C:\\Users\\basil\\OneDrive\\Desktop\\basil\\deepface\\database";
 
   // Initialize webcam
   useEffect(() => {
@@ -58,93 +59,75 @@ const AddStudent = () => {
     setCaptureCount(prev => prev + 1);
   };
 
-  const handleDirectorySelection = async () => {
-    try {
-      // For Chrome/Edge - using File System Access API
-      if ('showDirectoryPicker' in window) {
-        const handle = await window.showDirectoryPicker();
-        if (await handle.queryPermission({ mode: 'readwrite' }) !== 'granted') {
-          const permission = await handle.requestPermission({ mode: 'readwrite' });
-          if (permission !== 'granted') throw new Error('Permission denied');
-        }
-        setDirectoryHandle(handle);
-        setCustomDirectoryPath(handle.name);
-        setMessage({ text: "Directory access granted", type: 'success' });
-      } 
-      // For other browsers - fallback to download with custom path
-      else {
-        setMessage({ 
-          text: "Browser doesn't support direct folder access. Images will download to default location with custom path structure.", 
-          type: 'info' 
-        });
-      }
-    } catch (error) {
-      console.error("Directory selection error:", error);
-      setMessage({ text: "Could not access directory", type: 'error' });
-    }
-  };
-
-  const saveImagesWithCustomPath = async () => {
-    if (!name.trim()) {
-      setMessage({ text: "Please enter student name first", type: 'error' });
+  const saveImagesToDirectory = async () => {
+    if (!name.trim() || !customId.trim()) {
+      setMessage({ text: "Student name and ID are required to save images", type: 'error' });
       return false;
     }
-
+  
+    const studentFolderName = `${name}_${customId}`.replace(/[^a-z0-9]/gi, '_');
+    const fullPath = `C:\\Users\\basil\\OneDrive\\Desktop\\basil\\deepface\\database\\${studentFolderName}`;
+  
     try {
-      // For browsers supporting File System Access API
-      if (directoryHandle) {
-        // Create the full custom path structure
-        const pathParts = customDirectoryPath.split('/').filter(Boolean);
-        let currentHandle = directoryHandle;
-        
-        // Navigate through the custom path structure
-        for (const folderName of pathParts) {
-          currentHandle = await currentHandle.getDirectoryHandle(folderName, { create: true });
+      // Try to get permission silently (won't work in most browsers)
+      let granted = false;
+      if ('showDirectoryPicker' in window) {
+        try {
+          // This will still prompt, but we minimize interaction
+          const dirHandle = await window.showDirectoryPicker({
+            mode: 'readwrite',
+            id: 'myAppImagesFolder', // Browser may remember this
+            startIn: 'desktop' // Start near target directory
+          });
+          
+          granted = true;
+          // Create student folder
+          const studentFolder = await dirHandle.getDirectoryHandle(studentFolderName, { create: true });
+          
+          // Save images
+          for (let i = 0; i < capturedImages.length; i++) {
+            const blob = await fetch(capturedImages[i]).then(r => r.blob());
+            const fileHandle = await studentFolder.getFileHandle(`student_${i}.jpg`, { create: true });
+            const writable = await fileHandle.createWritable();
+            await writable.write(blob);
+            await writable.close();
+          }
+          
+          return true;
+        } catch (error) {
+          console.log("Filesystem access failed, falling back to download");
         }
-        
-        // Create student folder
-        const studentFolderName = `${name}_${customId}`.replace(/[^a-z0-9]/gi, '_');
-        const studentFolderHandle = await currentHandle.getDirectoryHandle(studentFolderName, { create: true });
-
-        // Save images
-        for (let i = 0; i < capturedImages.length; i++) {
-          const imageDataUrl = capturedImages[i];
-          const blob = await (await fetch(imageDataUrl)).blob();
-          const fileName = `student_${i + 1}.jpg`;
-          const fileHandle = await studentFolderHandle.getFileHandle(fileName, { create: true });
-          const writable = await fileHandle.createWritable();
-          await writable.write(blob);
-          await writable.close();
-        }
-
-        setMessage({ 
-          text: `Saved ${capturedImages.length} images to: ${customDirectoryPath}/${studentFolderName}`,
-          type: 'success'
-        });
-        return true;
       }
-      // Fallback for other browsers
-      else {
-        capturedImages.forEach((imgData, index) => {
-          const link = document.createElement('a');
-          link.href = imgData;
-          link.download = `${customDirectoryPath}/${name}_${customId}/student_${index + 1}.jpg`;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-        });
-
-        setMessage({ 
-          text: `${capturedImages.length} images queued for download with path: ${customDirectoryPath}/${name}_${customId}`,
+  
+      // Fallback: Zip and download all images with proper path structure
+      if (!granted) {
+        const JSZip = (await import('jszip')).default;
+        const zip = new JSZip();
+        const folder = zip.folder(studentFolderName);
+        
+        await Promise.all(capturedImages.map(async (img, i) => {
+          const blob = await fetch(img).then(r => r.blob());
+          folder.file(`student_${i}.jpg`, blob);
+        }));
+        
+        const content = await zip.generateAsync({ type: 'blob' });
+        const url = URL.createObjectURL(content);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${studentFolderName}.zip`;
+        a.click();
+        
+        setMessage({
+          text: `Downloaded ZIP with images for ${studentFolderName}. Unzip to: ${fullPath}`,
           type: 'success'
         });
         return true;
       }
     } catch (error) {
       console.error("Error saving images:", error);
-      setMessage({ 
-        text: "Failed to save images to specified path", 
-        type: 'error' 
+      setMessage({
+        text: "Couldn't save images automatically. Please save them manually.",
+        type: 'error'
       });
       return false;
     }
@@ -195,13 +178,13 @@ const AddStudent = () => {
 
       if (error) throw error;
 
-      // Save images with custom path if any were captured
+      // Save images to the hardcoded directory if any were captured
       if (capturedImages.length > 0) {
-        await saveImagesWithCustomPath();
+        await saveImagesToDirectory();
       }
 
       setMessage({ 
-        text: "Student added successfully! Images saved with specified path.", 
+        text: "Student added successfully! Images saved to specified directory.", 
         type: 'success' 
       });
       
@@ -305,35 +288,6 @@ const AddStudent = () => {
           {formErrors.password && (
             <p className="mt-1 text-sm text-red-600">{formErrors.password}</p>
           )}
-        </div>
-
-        {/* Custom Directory Path */}
-        <div>
-          <label htmlFor="directoryPath" className="block text-sm font-medium text-gray-700">
-            Save Images To Path (e.g., "School/Student_Photos")
-          </label>
-          <div className="flex mt-1">
-            <input
-              id="directoryPath"
-              type="text"
-              value={customDirectoryPath}
-              onChange={(e) => setCustomDirectoryPath(e.target.value)}
-              className="flex-1 rounded-l-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"
-              placeholder="Enter folder path"
-            />
-            <button
-              type="button"
-              onClick={handleDirectorySelection}
-              className="px-4 py-2 bg-blue-600 text-white rounded-r-md hover:bg-blue-700 border border-blue-600"
-            >
-              Select
-            </button>
-          </div>
-          <p className="mt-1 text-xs text-gray-500">
-            {directoryHandle ? 
-              "Directory access granted" : 
-              "Path will be used for downloaded files if browser doesn't support direct folder access"}
-          </p>
         </div>
 
         {/* Webcam Section */}
