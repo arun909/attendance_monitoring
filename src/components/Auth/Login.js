@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../Auth/supabaseClient'; // Import Supabase client
+import { supabase } from '../Auth/supabaseClient';
 
 const Login = () => {
   const [role, setRole] = useState('student');
@@ -14,53 +14,51 @@ const Login = () => {
     setError('');
 
     try {
-      // Step 1: Authenticate with Supabase
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email,
-        password
-      });
-
-      console.log("Auth Response:", authData);
-      console.log("Auth Error:", authError);
-      if (authError || !authData.user) {
-        setError("Invalid email or password.");
+      // Convert password string to integer
+      const passwordInt = parseInt(password);
+      if (isNaN(passwordInt)) {
+        setError("Password must be a number");
         return;
       }
 
-          const { data, error } = await supabase.from('users').select('*').limit(5); // Fetch first 5 users
-
-      if (error) {
-        console.error("Error fetching users:", error);
-      } else {
-        console.log("Users table data:", data);
-  }
-
-      // Step 2: Fetch User Role from Supabase Database
+      // Step 1: Fetch user data including password from users table
       const { data: userData, error: userError } = await supabase
         .from('users')
-        .select('role')
+        .select('id, name, role, password')
         .eq('email', email)
-        .maybeSingle(); // Prevents crash if no user is found
-         console.log(email);
-         console.log(userData);
+        .maybeSingle();
 
       if (userError || !userData) {
-        setError("User role not found. Please contact admin.");
+        setError("User not found. Please check your email.");
         return;
       }
 
-      // Step 3: Validate Role
+      // Step 2: Verify password matches (comparing integers)
+      if (userData.password !== passwordInt) {
+        setError("Invalid password.");
+        return;
+      }
+
+      // Step 3: Validate role
       if (userData.role !== role) {
         setError(`Incorrect role. You are registered as a ${userData.role}.`);
         return;
       }
 
-      // Step 4: Redirect User Based on Role
-      navigate(role === 'student' ? '/student-dashboard' : '/teacher-dashboard');
+      // Step 4: Store user data in localStorage (without password)
+      localStorage.setItem('currentUser', JSON.stringify({
+        id: userData.id,
+        email: email,
+        name: userData.name,
+        role: userData.role
+      }));
+
+      // Step 5: Redirect based on role
+      navigate(userData.role === 'student' ? '/student-dashboard' : '/teacher-dashboard');
 
     } catch (error) {
       setError("An unexpected error occurred. Please try again.");
-      console.error(error);
+      console.error("Login error:", error);
     }
   };
 
@@ -119,13 +117,14 @@ const Login = () => {
 
           {/* Password Input */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Password (numeric)</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Enter your password"
+              placeholder="Enter your numeric password"
+              pattern="[0-9]*" // Only allows numeric input
               required
             />
           </div>
