@@ -4,6 +4,7 @@ import Login from './components/Auth/Login';
 import StudentDash from './components/Student_dash';
 import TeacherDash from './components/Teacher_dash';
 import Attendance from './components/teacher/attendance';
+import AddStudent from './components/teacher/AddStudent';
 
 function App() {
   return (
@@ -15,6 +16,8 @@ function App() {
             <Route path="/student-dashboard" element={<StudentDash />} />
             <Route path="/teacher-dashboard" element={<TeacherDash />} />
             <Route path="/attendance" element={<Attendance />} />
+            <Route path="/AddStudent" element={<AddStudent/>} />
+
           </Routes>
         </header>
       </div>
