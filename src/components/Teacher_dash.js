@@ -11,9 +11,6 @@ const TeacherDash = () => {
   const [mailPassword, setMailPassword] = useState('');
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [timetableImage, setTimetableImage] = useState(null);
-  const [timetableImageUrl, setTimetableImageUrl] = useState('');
-  const [isUploadingTimetable, setIsUploadingTimetable] = useState(false);
 
   const navigate = useNavigate();
 
@@ -25,19 +22,10 @@ const TeacherDash = () => {
         // Fetch students
         const { data: studentsData, error: studentsError } = await supabase
           .from('users')
-          .select('*')
+          .select('id, name, email')
           .eq('role', 'student');
         
         if (studentsError) throw studentsError;
-
-        // Fetch timetable
-        const { data: timetableData, error: timetableError } = await supabase
-          .from('timetable')
-          .select('image_url')
-          .order('created_at', { ascending: false })
-          .limit(1);
-
-        if (timetableError) throw timetableError;
 
         // Update state
         if (studentsData) {
@@ -48,12 +36,8 @@ const TeacherDash = () => {
             attendancePercentage: student.attendancePercentage || 75 + Math.floor(Math.random() * 20)
           })));
         }
-
-        if (timetableData?.[0]?.image_url) {
-          setTimetableImageUrl(timetableData[0].image_url);
-        }
       } catch (error) {
-        console.error('Error fetching data:', error);
+        console.error('Error fetching students:', error);
       } finally {
         setLoading(false);
       }
@@ -66,47 +50,6 @@ const TeacherDash = () => {
   const totalStudents = students.length;
   const averageAttendance = students.reduce((sum, student) => sum + student.attendancePercentage, 0) / totalStudents || 0;
   const topPerformers = [...students].sort((a, b) => b.attendancePercentage - a.attendancePercentage).slice(0, 3);
-  const studentsNeedingAttention = students.filter(student => student.attendancePercentage < 80);
-
-  // Handle timetable upload
-  const handleTimetableUpload = async (e) => {
-    e.preventDefault();
-    if (!timetableImage) return;
-
-    setIsUploadingTimetable(true);
-    try {
-      // Upload to storage
-      const fileExt = timetableImage.name.split('.').pop();
-      const fileName = `timetable_${Date.now()}.${fileExt}`;
-      const filePath = `timetables/${fileName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('timetable-images')
-        .upload(filePath, timetableImage);
-
-      if (uploadError) throw uploadError;
-
-      // Get public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('timetable-images')
-        .getPublicUrl(filePath);
-
-      // Save to database
-      const { error: dbError } = await supabase
-        .from('timetable')
-        .insert([{ image_url: publicUrl }]);
-
-      if (dbError) throw dbError;
-
-      setTimetableImageUrl(publicUrl);
-      setTimetableImage(null);
-    } catch (error) {
-      console.error('Timetable upload failed:', error);
-      alert('Failed to upload timetable');
-    } finally {
-      setIsUploadingTimetable(false);
-    }
-  };
 
   // Handle student addition
   const handleAddStudent = async (e) => {
@@ -129,7 +72,6 @@ const TeacherDash = () => {
           role: 'student',
           attendancePercentage: 100
         }]);
-
       if (dbError) throw dbError;
 
       // Update local state
@@ -180,7 +122,6 @@ const TeacherDash = () => {
         <div className="container mx-auto p-4 flex space-x-8">
           <button className={`${darkMode ? 'text-blue-400' : 'text-blue-600'} font-semibold`}>Dashboard</button>
           <button onClick={() => navigate('/attendance')} className={`${darkMode ? 'text-blue-400' : 'text-blue-600'} font-semibold`}>Attendance</button>
-          <button className={`${darkMode ? 'text-blue-400' : 'text-blue-600'} font-semibold`}>Timetable</button>
           <button onClick={() => setShowAddStudentForm(true)} className={`${darkMode ? 'text-blue-400' : 'text-blue-600'} font-semibold`}>Add Student</button>
         </div>
       </div>
@@ -201,7 +142,11 @@ const TeacherDash = () => {
                   <div key={student.id} className={`p-3 rounded-lg flex justify-between items-center ${
                     darkMode ? 'bg-gray-700' : 'bg-gray-50'
                   }`}>
-                    <span>{student.name}</span>
+                    <div>
+                      <div className="font-medium">ID: {student.id}</div>
+                      <div className="font-bold">{student.name}</div>
+                      <div className="text-sm text-gray-500">{student.email}</div>
+                    </div>
                     <span className="font-bold">{student.attendancePercentage}%</span>
                   </div>
                 ))
@@ -209,24 +154,7 @@ const TeacherDash = () => {
             </div>
           </div>
 
-          {/* Add Class Form */}
-          <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} p-6 rounded-lg shadow-md`}>
-            <h3 className="text-xl font-semibold mb-4">Add Class</h3>
-            <form className="space-y-4">
-              <div>
-                <label className="block mb-1">Class Name</label>
-                <input type="text" className={`w-full p-2 rounded ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`} />
-              </div>
-              <div>
-                <label className="block mb-1">Date</label>
-                <input type="date" className={`w-full p-2 rounded ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`} />
-              </div>
-              <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded">
-                Add Class
-              </button>
-            </form>
-          </div>
-
+         
           {/* Attendance Overview */}
           <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} p-6 rounded-lg shadow-md`}>
             <h3 className="text-xl font-semibold mb-4">Attendance Overview</h3>
@@ -250,48 +178,6 @@ const TeacherDash = () => {
                   ))}
                 </ul>
               </div>
-            </div>
-          </div>
-
-          {/* Timetable Section */}
-          <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} p-6 rounded-lg shadow-md col-span-3`}>
-            <h3 className="text-xl font-semibold mb-4">Class Timetable</h3>
-            <form onSubmit={handleTimetableUpload} className="mb-6 flex flex-col md:flex-row gap-4">
-              <div className="flex-grow">
-                <label className="block mb-1">Upload Timetable (Image)</label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => setTimetableImage(e.target.files?.[0])}
-                  className={`w-full p-2 rounded ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`}
-                  disabled={isUploadingTimetable}
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={!timetableImage || isUploadingTimetable}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded self-end"
-              >
-                {isUploadingTimetable ? 'Uploading...' : 'Upload'}
-              </button>
-            </form>
-            <div className="border rounded-lg overflow-hidden">
-              {timetableImageUrl ? (
-                <>
-                  <img
-                    src={timetableImageUrl}
-                    alt="Class timetable"
-                    className="w-full h-auto max-h-[600px] object-contain"
-                  />
-                  <div className={`p-2 text-center ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
-                    Current Timetable
-                  </div>
-                </>
-              ) : (
-                <div className={`p-8 text-center ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
-                  No timetable available
-                </div>
-              )}
             </div>
           </div>
         </div>

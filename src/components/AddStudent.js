@@ -1,85 +1,58 @@
-import React, { useState } from "react";
-import { supabase } from '../components/Auth/supabaseClient'; // Import Supabase client
+const handleAddStudent = async (e) => {
+  e.preventDefault();
+  
+  // Add client-side validation
+  if (!email.includes('@') || !email.includes('.')) {
+      setMessage("❌ Please enter a valid email address");
+      return;
+  }
+  
+  if (password.length < 6) {
+      setMessage("❌ Password must be at least 6 characters");
+      return;
+  }
 
-const AddStudent = () => {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState(null);
+  setLoading(true);
+  setMessage(null);
 
-  // Function to add student
-  const handleAddStudent = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setMessage(null);
+  try {
+      // First check if user exists
+      const { data: existingUsers } = await supabase
+          .from('users')
+          .select('email')
+          .eq('email', email);
+          
+      if (existingUsers && existingUsers.length > 0) {
+          throw new Error('This email is already registered');
+      }
 
-    try {
-      // Step 1: Register student in Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email,
-        password,
+      // Register student
+      const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+              data: {
+                  name,
+                  role: 'student'
+              }
+          }
       });
 
-      if (authError) throw authError;
+      if (error) throw error;
 
       setMessage("✅ Student added successfully!");
       setName("");
       setEmail("");
       setPassword("");
-    } catch (error) {
+      
+  } catch (error) {
       setMessage(`❌ Error: ${error.message}`);
-    } finally {
+      
+      // Specific rate limit handling
+      if (error.message.includes('rate limit')) {
+          setMessage("❌ Too many requests. Please wait before trying again.");
+      }
+  } finally {
       setLoading(false);
-    }
-  };
-
-  return (
-    <div className="bg-white p-6 rounded-lg shadow-md max-w-md mx-auto">
-      <h2 className="text-xl font-semibold mb-4">Add New Student</h2>
-      {message && <p className="mb-4 text-center font-medium">{message}</p>}
-      <form onSubmit={handleAddStudent} className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium">Full Name</label>
-          <input
-            type="text"
-            className="w-full p-2 border rounded-md"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium">Email</label>
-          <input
-            type="email"
-            className="w-full p-2 border rounded-md"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium">Password</label>
-          <input
-            type="password"
-            className="w-full p-2 border rounded-md"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            minLength="6"
-          />
-        </div>
-        <button
-          type="submit"
-          className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-md"
-          disabled={loading}
-        >
-          {loading ? "Adding..." : "Add Student"}
-        </button>
-      </form>
-    </div>
-  );
+  }
 };
-
-export default AddStudent;
